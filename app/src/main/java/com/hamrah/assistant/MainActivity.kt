@@ -16,13 +16,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        sm = SpeechManager(this) { cmd -> runOnUiThread { router.route(cmd) } }
+        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 48, 48, 48) }
+        val status = TextView(this).apply { text = "سیستم آماده است."; textSize = 18f }
+        
+        sm = SpeechManager(this, { cmd -> runOnUiThread { router.route(cmd) } }, { msg -> runOnUiThread { status.text = msg } }, {})
         router = CommandRouter(this, sm)
 
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(48,48,48,48)
-        }
-        val status = TextView(this).apply { text = "آماده"; textSize = 18f }
         layout.addView(status)
         layout.addView(Button(this).apply {
             text = "🎙 شروع شنیدن"; textSize = 18f

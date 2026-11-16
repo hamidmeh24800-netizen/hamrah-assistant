@@ -9,8 +9,8 @@ android {
         applicationId = "com.hamrah.assistant"
         minSdk = 29
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "2.0.0"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -28,4 +28,6 @@ dependencies {
     implementation("com.alphacephei:vosk-android:0.3.75@aar")
     implementation("net.java.dev.jna:jna:5.18.1@aar")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    // اضافه کردن OkHttp برای ارتباط با سرور
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }
