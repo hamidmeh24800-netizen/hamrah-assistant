@@ -12,7 +12,9 @@ import java.util.Locale
 
 class SpeechManager(
     private val context: Context,
-    private val onCommand: (String) -> Unit
+    private val onCommand: (String) -> Unit,
+    private val onStatusUpdate: (String) -> Unit,
+    private val onModelReady: () -> Unit
 ) : RecognitionListener, TextToSpeech.OnInitListener {
 
     private var model: Model? = null
@@ -24,18 +26,71 @@ class SpeechManager(
         tts = TextToSpeech(context, this)
         val dir = File(context.filesDir, "vosk-model-small-fa-0.42")
         if (File(dir, "conf/model.conf").exists()) {
-            try { model = Model(dir.absolutePath); Log.d("Hamrah", "Vosk loaded") }
-            catch (e: Exception) { Log.e("Hamrah", "Vosk load failed", e) }
+            loadModel(dir)
+        } else {
+            downloadModel(dir)
         }
     }
 
+    private fun downloadModel(dir: File) {
+        onStatusUpdate("در حال دانلود مدل گفتار (حدود ۵۰ مگابایت)...\nلطفاً صبر کنید.")
+        Thread {
+            try {
+                val archive = File(context.cacheDir, "vosk-fa.zip")
+                val url = java.net.URL("https://alphacephei.com/vosk/models/vosk-model-small-fa-0.42.zip")
+                url.openStream().use { input ->
+                    archive.outputStream().use { output -> input.copyTo(output) }
+                }
+                onStatusUpdate("در حال استخراج مدل...")
+                dir.deleteRecursively()
+                dir.mkdirs()
+                java.util.zip.ZipInputStream(archive.inputStream().buffered()).use { zip ->
+                    while (true) {
+                        val entry = zip.nextEntry ?: break
+                        val name = entry.name.replace('\\', '/')
+                        if (name.startsWith("/") || name.split('/').any { it == ".." }) throw Exception("Invalid path")
+                        val relative = name.substringAfter('/', "")
+                        if (relative.isNotEmpty()) {
+                            val out = File(dir, relative)
+                            if (entry.isDirectory) out.mkdirs() else {
+                                out.parentFile?.mkdirs()
+                                out.outputStream().use { zip.copyTo(it) }
+                            }
+                        }
+                        zip.closeEntry()
+                    }
+                }
+                archive.delete()
+                loadModel(dir)
+            } catch (e: Exception) {
+                Log.e("Hamrah", "Download failed", e)
+                onStatusUpdate("دانلود ناموفق بود. اینترنت را بررسی کنید.")
+            }
+        }.start()
+    }
+
+    private fun loadModel(dir: File) {
+        try {
+            model = Model(dir.absolutePath)
+            onModelReady()
+            onStatusUpdate("آماده است. دکمه را بزنید.")
+        } catch (e: Exception) {
+            Log.e("Hamrah", "Vosk load failed", e)
+            onStatusUpdate("خطا در بارگذاری مدل.")
+        }
+    }
+
+    fun isModelReady() = model != null
+
     fun startListening() {
-        val m = model ?: run { speak("مدل گفتار آماده نیست"); return }
+        val m = model ?: return
         try {
             val r = Recognizer(m, 16000.0f)
             speechService = SpeechService(r, 16000.0f)
             speechService?.startListening(this)
-        } catch (e: Exception) { Log.e("Hamrah", "Listen failed", e) }
+        } catch (e: Exception) {
+            Log.e("Hamrah", "Listen failed", e)
+        }
     }
 
     fun stopListening() {
