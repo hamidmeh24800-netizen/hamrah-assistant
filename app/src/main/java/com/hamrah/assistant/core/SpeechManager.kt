@@ -9,6 +9,7 @@ import org.vosk.android.RecognitionListener
 import org.vosk.android.SpeechService
 import java.io.File
 import java.util.Locale
+import org.json.JSONObject
 
 class SpeechManager(
     private val context: Context,
@@ -33,7 +34,7 @@ class SpeechManager(
     }
 
     private fun downloadModel(dir: File) {
-        onStatusUpdate("در حال دانلود مدل گفتار (حدود ۵۰ مگابایت)...\nلطفاً صبر کنید.")
+        onStatusUpdate("در حال دانلود مدل گفتار... لطفاً صبر کنید.")
         Thread {
             try {
                 val archive = File(context.cacheDir, "vosk-fa.zip")
@@ -41,14 +42,13 @@ class SpeechManager(
                 url.openStream().use { input ->
                     archive.outputStream().use { output -> input.copyTo(output) }
                 }
-                onStatusUpdate("در حال استخراج مدل...")
+                onStatusUpdate("در حال استخراج...")
                 dir.deleteRecursively()
                 dir.mkdirs()
                 java.util.zip.ZipInputStream(archive.inputStream().buffered()).use { zip ->
                     while (true) {
                         val entry = zip.nextEntry ?: break
                         val name = entry.name.replace('\\', '/')
-                        if (name.startsWith("/") || name.split('/').any { it == ".." }) throw Exception("Invalid path")
                         val relative = name.substringAfter('/', "")
                         if (relative.isNotEmpty()) {
                             val out = File(dir, relative)
@@ -64,7 +64,7 @@ class SpeechManager(
                 loadModel(dir)
             } catch (e: Exception) {
                 Log.e("Hamrah", "Download failed", e)
-                onStatusUpdate("دانلود ناموفق بود. اینترنت را بررسی کنید.")
+                onStatusUpdate("دانلود ناموفق بود.")
             }
         }.start()
     }
@@ -75,7 +75,6 @@ class SpeechManager(
             onModelReady()
             onStatusUpdate("آماده است. دکمه را بزنید.")
         } catch (e: Exception) {
-            Log.e("Hamrah", "Vosk load failed", e)
             onStatusUpdate("خطا در بارگذاری مدل.")
         }
     }
@@ -90,6 +89,7 @@ class SpeechManager(
             speechService?.startListening(this)
         } catch (e: Exception) {
             Log.e("Hamrah", "Listen failed", e)
+            onStatusUpdate("خطا در روشن کردن میکروفون")
         }
     }
 
@@ -108,16 +108,26 @@ class SpeechManager(
         }
     }
 
-    override fun onResult(h: String?) {
-        val t = parse(h) ?: return
-        if (t.isNotBlank()) onCommand(t)
+    override fun onResult(hypothesis: String?) {
+        val t = parse(hypothesis, "text") ?: return
+        if (t.isNotBlank()) {
+            stopListening()
+            onCommand(t)
+        }
     }
-    override fun onPartialResult(h: String?) {}
-    override fun onFinalResult(h: String?) { onResult(h) }
-    override fun onError(e: Exception?) { stopListening() }
-    override fun onTimeout() { stopListening() }
 
-    private fun parse(json: String?): String? = try {
-        org.json.JSONObject(json ?: "{}").optString("text", "").trim().ifBlank { null }
+    override fun onPartialResult(hypothesis: String?) {
+        val t = parse(hypothesis, "partial") ?: return
+        if (t.isNotBlank()) {
+            onStatusUpdate("شنیدم: $t...")
+        }
+    }
+
+    override fun onFinalResult(hypothesis: String?) { onResult(hypothesis) }
+    override fun onError(e: Exception?) { stopListening(); onStatusUpdate("خطای میکروفون") }
+    override fun onTimeout() { stopListening(); onStatusUpdate("چیزی نشنیدم") }
+
+    private fun parse(json: String?, key: String): String? = try {
+        JSONObject(json ?: "{}").optString(key, "").trim().ifBlank { null }
     } catch (_: Exception) { null }
 }

@@ -13,20 +13,52 @@ import com.hamrah.assistant.core.SpeechManager
 class MainActivity : AppCompatActivity() {
     private lateinit var sm: SpeechManager
     private lateinit var router: CommandRouter
+    private var isListening = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 48, 48, 48) }
-        val status = TextView(this).apply { text = "سیستم آماده است."; textSize = 18f }
         
-        sm = SpeechManager(this, { cmd -> runOnUiThread { router.route(cmd) } }, { msg -> runOnUiThread { status.text = msg } }, {})
+        val status = TextView(this).apply { text = "در حال آماده سازی..."; textSize = 16f }
+        val resultView = TextView(this).apply { text = "نتیجه اینجا نمایش داده می‌شود"; textSize = 18f; setPadding(0, 30, 0, 30) }
+        
+        sm = SpeechManager(
+            this,
+            onCommand = { cmd -> 
+                runOnUiThread { 
+                    status.text = "دستور: $cmd\nدر حال ارسال به سرور..."
+                    router.route(cmd) 
+                } 
+            },
+            onStatusUpdate = { msg -> runOnUiThread { status.text = msg } },
+            onModelReady = { runOnUiThread { status.text = "مدل آماده است." } }
+        )
         router = CommandRouter(this, sm)
 
-        layout.addView(status)
-        layout.addView(Button(this).apply {
+        val btn = Button(this).apply {
             text = "🎙 شروع شنیدن"; textSize = 18f
-            setOnClickListener { sm.startListening(); status.text = "در حال شنیدن..." }
-        })
+            setOnClickListener {
+                if (!isListening) {
+                    if (sm.isModelReady()) {
+                        sm.startListening()
+                        isListening = true
+                        text = "⏹ توقف"
+                        status.text = "گوش می‌دهم..."
+                    } else {
+                        status.text = "مدل هنوز آماده نیست."
+                    }
+                } else {
+                    sm.stopListening()
+                    isListening = false
+                    text = "🎙 شروع شنیدن"
+                    status.text = "متوقف شد."
+                }
+            }
+        }
+
+        layout.addView(status)
+        layout.addView(btn)
+        layout.addView(resultView)
         setContentView(layout)
 
         sm.initialize()
