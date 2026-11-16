@@ -2,7 +2,6 @@ package com.hamrah.assistant.core
 
 import android.content.Context
 import android.content.Intent
-import com.hamrah.assistant.service.HamrahAccessibilityService
 import kotlinx.coroutines.*
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
@@ -11,10 +10,13 @@ import org.json.JSONObject
 import java.io.IOException
 
 class CommandRouter(private val ctx: Context, private val sm: SpeechManager) {
+    // افزایش زمان انتظار به ۶۰ ثانیه
     private val client = OkHttpClient.Builder()
-        .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
         .build()
+    
     private val serverUrl = "https://hamid248-hamrah-ai.hf.space/api/predict"
 
     fun route(cmd: String) {
@@ -29,7 +31,7 @@ class CommandRouter(private val ctx: Context, private val sm: SpeechManager) {
                 val request = Request.Builder().url(serverUrl).post(body).build()
                 
                 client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) throw IOException("Server error: ${response.code}")
+                    if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
                     val responseData = response.body?.string() ?: ""
                     val jsonResponse = JSONObject(responseData)
                     val aiOutput = jsonResponse.getJSONArray("data").getString(0)
@@ -40,7 +42,8 @@ class CommandRouter(private val ctx: Context, private val sm: SpeechManager) {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    sm.speak("خطا در اتصال به سرور.")
+                    val errMsg = e.message ?: "ناشناخته"
+                    sm.speak("خطا در اتصال به سرور: $errMsg")
                 }
             }
         }
@@ -77,7 +80,7 @@ class CommandRouter(private val ctx: Context, private val sm: SpeechManager) {
         pm.getLaunchIntentForPackage(targetApp.packageName)?.let {
             it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             ctx.startActivity(it)
-            sm.speak("برنامه باز شد.")
+            sm.speak("برنامه ${pm.getApplicationLabel(targetApp)} باز شد.")
         }
     }
 }
